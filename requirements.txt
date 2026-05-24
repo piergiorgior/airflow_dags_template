@@ -1,0 +1,48 @@
+# ============================================================
+#  airflow-dag-templates — Python dependencies
+#  Python 3.12+  |  Airflow 3.2.1
+# ============================================================
+#
+#  USAGE
+#  ─────
+#  Local virtualenv (for running tests outside Docker):
+#    pip install -r requirements.txt
+#
+#  Inside Docker (add extra packages to the running container):
+#    Set _PIP_ADDITIONAL_REQUIREMENTS in .env, e.g.:
+#      _PIP_ADDITIONAL_REQUIREMENTS=clickhouse-driver>=0.2.7 kafka-python>=2.0.2
+#
+#  The apache/airflow:3.2.1 image already bundles core Airflow and its
+#  transitive deps; the packages below are the *additional* requirements
+#  needed by this project on top of the base image.
+# ============================================================
+
+
+# ------------------------------------------------------------
+#  Core — Airflow (pinned; omit in Docker, it's already there)
+# ------------------------------------------------------------
+apache-airflow==3.2.1
+
+
+# ------------------------------------------------------------
+#  Airflow Providers
+# ------------------------------------------------------------
+apache-airflow-providers-postgres>=5.12.0   # PostgresHook used by ETL and CDC DAGs
+apache-airflow-providers-celery>=3.8.0      # CeleryExecutor support
+apache-airflow-providers-amazon>=8.24.0     # S3KeySensor + S3Hook used by S3 ingestion pipeline
+
+
+# ------------------------------------------------------------
+#  Pipeline dependencies
+# ------------------------------------------------------------
+clickhouse-driver>=0.2.7     # ClickHouseHook native TCP protocol
+kafka-python>=2.0.2          # KafkaBatchSensor + consume_messages task
+psycopg2-binary>=2.9.9       # PostgreSQL driver (psycopg2 without C-ext build)
+requests>=2.32.0             # Slack Incoming Webhook in on_failure_callback
+
+
+# ------------------------------------------------------------
+#  Testing
+# ------------------------------------------------------------
+pytest>=8.2.0
+pytest-mock>=3.14.0
