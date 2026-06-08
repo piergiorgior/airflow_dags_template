@@ -14,13 +14,14 @@ Demonstrates:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from airflow.sdk import task
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 
 from _base_dag import make_dag, build_idempotent_run_key
+from hooks.clickhouse_hook import ClickHouseHook
 
 log = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ with make_dag(
             sql,
             parameters={
                 "start": logical_date,
-                "end": logical_date.replace(minute=0, second=0) + __import__("datetime").timedelta(hours=1),
+                "end": logical_date.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1),
             },
         )
 
@@ -136,22 +137,24 @@ with make_dag(
             return
 
         run_key = build_idempotent_run_key("etl_postgres_to_clickhouse", logical_date)
-        log.info("Starting load | rows=%d | run_key=%s", len(rows), run_key)
+        hour_start = logical_date.replace(minute=0, second=0, microsecond=0)
+        hour_end = hour_start + timedelta(hours=1)
+        log.info("Starting load | rows=%d | window=[%s, %s) | run_key=%s",
+                 len(rows), hour_start, hour_end, run_key)
 
-        # NOTE: replace ClickHouseHook with your actual hook/client.
-        # Example shown with a hypothetical hook for illustration.
-        #
-        # from airflow_clickhouse_plugin.hooks.clickhouse_hook import ClickHouseHook
-        # hook = ClickHouseHook(clickhouse_conn_id="clickhouse_analytics")
-        #
-        # Idempotent delete — remove existing rows for this time window first
-        # hook.execute(
-        #     "ALTER TABLE analytics.events DELETE WHERE created_at >= %(start)s AND created_at < %(end)s",
-        #     {"start": logical_date, "end": logical_date + timedelta(hours=1)},
-        # )
-        # hook.execute("INSERT INTO analytics.events VALUES", rows)
+        hook = ClickHouseHook(clickhouse_conn_id="clickhouse_analytics")
 
-        log.info("Load complete | rows=%d | run_key=%s", len(rows), run_key)
+        # Idempotent: delete rows for the current hour window before inserting.
+        # ClickHouse DELETE is an async mutation — safe to re-run on retry
+        # because the subsequent bulk_insert is the source of truth.
+        hook.execute(
+            "ALTER TABLE analytics.events DELETE "
+            "WHERE created_at >= %(start)s AND created_at < %(end)s",
+            {"start": hour_start, "end": hour_end},
+        )
+
+        inserted = hook.bulk_insert("analytics.events", rows)
+        log.info("Load complete | inserted=%d | run_key=%s", inserted, run_key)
 
     # ---------------------------------------------------------------------------
     # Wire up tasks — Airflow 3.x TaskFlow API

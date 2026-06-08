@@ -2,16 +2,18 @@
 
 Production-grade Apache Airflow 3.x DAG templates demonstrating Senior Data Platform Engineering patterns: idempotent pipelines, custom hooks, CDC streaming, S3 ingestion, and a full pytest suite.
 
+The entire stack runs locally via Docker Compose — no external accounts required.
+
 ---
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    subgraph Sources
-        PG_src[(PostgreSQL\nSource DB)]
-        KF[Kafka Topic\ncdc.events]
-        S3[S3 Data Lake\nraw/events/YYYY/MM/DD/]
+    subgraph Sources["Sources (local Docker)"]
+        PG_src[(postgres-demo\nsource_db.events)]
+        KF[Kafka\ncdc.events]
+        S3[LocalStack S3\nairflow-demo/raw/events/]
     end
 
     subgraph Airflow["Airflow 3.2.1 · CeleryExecutor"]
@@ -21,9 +23,9 @@ flowchart LR
         S3P["s3_ingestion_pipeline\n─────────────────────\nS3KeySensor\n→ extract_from_s3\n→ transform\n→ load_to_clickhouse\n@daily · DROP PARTITION"]
     end
 
-    subgraph Targets
+    subgraph Targets["Targets (local Docker)"]
         CH[(ClickHouse\nanalytics.events)]
-        PG_dst[(PostgreSQL\npublic.events)]
+        PG_dst[(postgres-demo\ntarget_db.events)]
     end
 
     PG_src -->|hourly batch| ETL --> CH
@@ -54,7 +56,7 @@ flowchart LR
 | Tool | Version |
 |---|---|
 | Docker & Docker Compose v2+ | any recent |
-| Python | 3.12+ (local dev only) |
+| Python | 3.12+ (local dev / tests only) |
 | `make` | optional |
 
 ---
@@ -62,19 +64,21 @@ flowchart LR
 ## Quickstart
 
 ```bash
-# 1. Copy the example env file and set your local UID
-cp .env.example .env
-echo "AIRFLOW_UID=$(id -u)" >> .env
+# 1. Set your UID (Linux/macOS/Git Bash) — skip on Windows (defaults to 50000)
+echo "AIRFLOW_UID=$(id -u)" > .env
 
-# 2. Initialise the metadata DB and create the admin user (runs once)
+# 2. Initialise the metadata DB and create the admin user
 docker compose up airflow-init
+# Wait for: "apache-airflow==3.2.1" in the output, then Ctrl-C
 
-# 3. Start all services in detached mode
+# 3. Start the full stack (Airflow + ClickHouse + Kafka + LocalStack + demo data)
 docker compose up -d
 
 # 4. Open the Airflow UI
 open http://localhost:8080   # credentials: admin / admin
 ```
+
+All connections and variables are **pre-wired** to the local demo containers — no manual configuration in the UI needed.
 
 ### Optional: Celery Flower monitoring
 
@@ -92,6 +96,39 @@ docker compose down -v --remove-orphans   # full reset
 
 ---
 
+## Demo stack — what runs locally
+
+| Service | Container | Endpoint | Notes |
+|---|---|---|---|
+| Airflow UI | `airflow_api_server` | http://localhost:8080 | admin / admin |
+| ClickHouse | `airflow_clickhouse` | http://localhost:8123/play | TCP: 9000 |
+| Kafka | `airflow_kafka` | localhost:9092 | KRaft, no Zookeeper |
+| LocalStack (S3) | `airflow_localstack` | http://localhost:4566 | |
+| Postgres (Airflow) | `airflow_postgres` | localhost:5432 | metadata DB |
+| Postgres (demo) | `airflow_postgres_demo` | localhost:5433 | source + target data |
+
+### What `demo-init` sets up automatically
+
+The `demo-init` container runs once after all services are healthy:
+
+- **Kafka** — creates topic `cdc.events` and produces 5 seed CDC messages so the CDC DAG triggers on first run
+- **S3** — creates bucket `airflow-demo`, uploads `raw/events/YYYY/MM/DD/events.csv` + `_SUCCESS` marker for yesterday's date
+- **Postgres `source_db`** — `events` table with 500 seeded rows spanning the last 7 days
+- **Postgres `target_db`** — empty `events` table ready for CDC upserts
+- **ClickHouse** — `analytics.events` MergeTree table (created at container startup via init SQL)
+
+### Triggering the DAGs
+
+After `docker compose up -d`, unpause each DAG in the UI and:
+
+| DAG | How to trigger |
+|---|---|
+| `etl_postgres_to_clickhouse` | Runs `@hourly` — or trigger manually for any past hour |
+| `cdc_kafka_consumer` | Runs every 5 min — seed messages already in Kafka from `demo-init` |
+| `s3_ingestion_pipeline` | Trigger manually for yesterday's date (CSV + `_SUCCESS` already in S3) |
+
+---
+
 ## Running tests
 
 > **Platform note** — Airflow 3.x depends on `fcntl` and other POSIX-only system
@@ -102,7 +139,7 @@ docker compose down -v --remove-orphans   # full reset
 > `ModuleNotFoundError: No module named 'fcntl'` for any test that imports
 > `DagBag` or other Airflow internals.
 
-### Inside Docker (the only supported way)
+### Inside Docker (the only supported way on Windows)
 
 ```bash
 docker compose exec airflow-worker bash -c "
@@ -165,39 +202,36 @@ with make_dag(
 
 2. **Add tests** in `tests/dags/test_my_new_dag.py` mirroring the same structure as the existing test files.
 
-3. **Register connections** in the Airflow UI (Admin → Connections) or via environment variables in `.env`.
+3. **Register connections** in the Airflow UI (Admin → Connections) or via `AIRFLOW_CONN_*` environment variables in `.env`.
 
 ---
 
 ## Airflow Variables
 
-Configure in the UI (Admin → Variables) or via the CLI:
+All variables are **pre-configured** for the local demo stack via environment variables.
+To override for production, set them in the UI (Admin → Variables) or in `.env`.
 
-```bash
-docker compose exec airflow-webserver \
-  airflow variables set alert_slack_enabled true
-```
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `alert_slack_enabled` | No | `false` | Enable Slack failure alerts |
-| `alert_slack_webhook` | Only if Slack enabled | — | Slack Incoming Webhook URL |
-| `kafka_bootstrap_servers` | CDC DAG | — | Comma-separated broker list, e.g. `broker:9092` |
-| `s3_bucket` | S3 DAG | — | S3 bucket name, e.g. `my-data-lake` |
-| `s3_prefix` | S3 DAG | — | Key prefix inside the bucket, e.g. `raw/events` |
+| Variable | Demo value | Description |
+|---|---|---|
+| `alert_slack_enabled` | `false` | Enable Slack failure alerts |
+| `alert_slack_webhook` | — | Slack Incoming Webhook URL (only if Slack enabled) |
+| `kafka_bootstrap_servers` | `kafka:29092` | Comma-separated Kafka broker list |
+| `s3_bucket` | `airflow-demo` | S3 bucket name |
+| `s3_prefix` | `raw/events` | Key prefix inside the bucket |
 
 ---
 
 ## Airflow Connections
 
-Configure in the UI (Admin → Connections):
+All connections are **pre-configured** for the local demo stack via `AIRFLOW_CONN_*` environment variables.
+To override for production, set them in the UI (Admin → Connections) or in `.env`.
 
-| Conn ID | Type | Used by |
-|---|---|---|
-| `postgres_source` | Postgres | `etl_postgres_to_clickhouse` |
-| `clickhouse_analytics` | Generic / ClickHouse | `etl_postgres_to_clickhouse`, `s3_ingestion_pipeline` |
-| `postgres_target` | Postgres | `cdc_kafka_consumer` |
-| `aws_default` | Amazon Web Services | `s3_ingestion_pipeline` |
+| Conn ID | Type | Demo target | Used by |
+|---|---|---|---|
+| `postgres_source` | Postgres | `postgres-demo:5432/source_db` | `etl_postgres_to_clickhouse` |
+| `clickhouse_analytics` | Generic | `clickhouse:9000/analytics` | `etl_postgres_to_clickhouse`, `s3_ingestion_pipeline` |
+| `postgres_target` | Postgres | `postgres-demo:5432/target_db` | `cdc_kafka_consumer` |
+| `aws_default` | AWS | `localstack:4566` | `s3_ingestion_pipeline` |
 
 ---
 
@@ -227,7 +261,12 @@ airflow-dag-templates/
 │       └── hooks/
 │           └── test_clickhouse_hook.py     # 20+ unit tests for ClickHouseHook
 │
-├── docker-compose.yml                      # Airflow 3.2.1 + Postgres 17 + Redis 7, CeleryExecutor
+├── demo/
+│   ├── postgres_init.sh                    # Creates source_db + target_db tables, seeds 500 rows
+│   ├── clickhouse_init.sql                 # Creates analytics.events MergeTree table
+│   └── setup.py                            # Creates Kafka topic, S3 bucket, uploads demo data
+│
+├── docker-compose.yml                      # Full local stack: Airflow + ClickHouse + Kafka + LocalStack
 ├── requirements.txt                        # All Python dependencies
 ├── .env.example                            # Environment variable template
 ├── pytest.ini                              # pytest configuration
@@ -260,8 +299,8 @@ airflow-dag-templates/
 - **Orchestration**: Apache Airflow 3.2.1
 - **Executor**: CeleryExecutor (Redis broker)
 - **Metadata DB**: PostgreSQL 17
-- **OLAP**: ClickHouse (via `clickhouse-driver`)
-- **Streaming**: Apache Kafka (via `kafka-python`)
-- **Object storage**: Amazon S3 (via `apache-airflow-providers-amazon`)
+- **OLAP**: ClickHouse 24 (via `clickhouse-driver`)
+- **Streaming**: Apache Kafka 7.6 KRaft (via `kafka-python`)
+- **Object storage**: LocalStack S3 (via `apache-airflow-providers-amazon`)
 - **Testing**: pytest, unittest.mock
 - **Containerisation**: Docker Compose
