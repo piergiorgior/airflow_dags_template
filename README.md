@@ -304,3 +304,9 @@ airflow-dag-templates/
 - **Object storage**: LocalStack S3 (via `apache-airflow-providers-amazon`)
 - **Testing**: pytest, unittest.mock
 - **Containerisation**: Docker Compose
+
+---
+
+## License
+
+MIT
