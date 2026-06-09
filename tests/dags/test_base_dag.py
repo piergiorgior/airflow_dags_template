@@ -53,15 +53,6 @@ class TestGetDefaultArgs:
     def test_retry_exponential_backoff_default_true(self) -> None:
         assert get_default_args()["retry_exponential_backoff"] is True
 
-    def test_email_on_failure_default_false(self) -> None:
-        assert get_default_args()["email_on_failure"] is False
-
-    def test_email_on_retry_default_false(self) -> None:
-        assert get_default_args()["email_on_retry"] is False
-
-    def test_email_default_empty_list(self) -> None:
-        assert get_default_args()["email"] == []
-
     def test_depends_on_past_is_false(self) -> None:
         assert get_default_args()["depends_on_past"] is False
 
@@ -73,10 +64,6 @@ class TestGetDefaultArgs:
 
     def test_custom_retry_delay_minutes(self) -> None:
         assert get_default_args(retry_delay_minutes=10)["retry_delay"] == timedelta(minutes=10)
-
-    def test_custom_emails(self) -> None:
-        emails = ["alice@example.com", "bob@example.com"]
-        assert get_default_args(emails=emails)["email"] == emails
 
     def test_disable_exponential_backoff(self) -> None:
         result = get_default_args(retry_exponential_backoff=False)
@@ -271,9 +258,7 @@ class TestMakeDag:
             description="Test",
             schedule="@daily",
             start_date=datetime(2024, 1, 1),
-            extra_default_args={"email_on_failure": True},
         )
-        assert dag.default_args["email_on_failure"] is True
 
     def test_empty_tags_when_none(self) -> None:
         dag = make_dag(

@@ -162,7 +162,7 @@ with make_dag(
         # Resolved at runtime so brokers can change without touching DAG code
         kafka_bootstrap_servers=Variable.get(
             "kafka_bootstrap_servers",
-            default_var="kafka:29092",
+            default="kafka:29092",
         ),
         kafka_topic=KAFKA_TOPIC,
         kafka_group_id=KAFKA_GROUP_ID,
@@ -188,7 +188,7 @@ with make_dag(
         Returns:
             List of deserialised record dicts (one per valid Kafka message).
         """
-        bootstrap = Variable.get("kafka_bootstrap_servers", default_var="kafka:29092")
+        bootstrap = Variable.get("kafka_bootstrap_servers", default="kafka:29092")
 
         from kafka import KafkaConsumer  # noqa: PLC0415
 
@@ -281,7 +281,7 @@ with make_dag(
         log.info("Upsert complete | records=%d | run_key=%s", len(records), run_key)
 
         # Commit Kafka offsets AFTER successful write (at-least-once guarantee)
-        bootstrap = Variable.get("kafka_bootstrap_servers")
+        bootstrap = Variable.get("kafka_bootstrap_servers", default="kafka:29092")
         from kafka import KafkaConsumer  # noqa: PLC0415
 
         commit_consumer = KafkaConsumer(

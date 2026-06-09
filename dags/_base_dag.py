@@ -33,9 +33,6 @@ def get_default_args(
     retries: int = 3,
     retry_delay_minutes: int = 5,
     retry_exponential_backoff: bool = True,
-    email_on_failure: bool = False,
-    email_on_retry: bool = False,
-    emails: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Build a default_args dict for a DAG.
@@ -45,9 +42,6 @@ def get_default_args(
         retries:                    Number of retries before marking task as failed.
         retry_delay_minutes:        Base delay between retries (minutes).
         retry_exponential_backoff:  If True, delay doubles at each retry attempt.
-        email_on_failure:           Send email on task failure.
-        email_on_retry:             Send email on task retry.
-        emails:                     List of email addresses for alerts.
 
     Returns:
         dict compatible with DAG(default_args=...)
@@ -57,9 +51,6 @@ def get_default_args(
         "retries": retries,
         "retry_delay": timedelta(minutes=retry_delay_minutes),
         "retry_exponential_backoff": retry_exponential_backoff,
-        "email_on_failure": email_on_failure,
-        "email_on_retry": email_on_retry,
-        "email": emails or [],
         # Never catch up on missed runs — important for idempotent pipelines
         "depends_on_past": False,
     }
