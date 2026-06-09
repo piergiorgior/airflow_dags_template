@@ -20,7 +20,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from airflow.sdk import DAG  # Airflow 3.x SDK
-from airflow.models import Variable
+from airflow.sdk import Variable
 
 log = logging.getLogger(__name__)
 

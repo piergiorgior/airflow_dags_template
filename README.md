@@ -75,7 +75,7 @@ docker compose up airflow-init
 docker compose up -d
 
 # 4. Open the Airflow UI
-open http://localhost:8080   # credentials: admin / admin
+open http://localhost:8080   # credentials: admin / ... (to retrieve from airflow api server logs)
 ```
 
 All connections and variables are **pre-wired** to the local demo containers — no manual configuration in the UI needed.
@@ -100,7 +100,7 @@ docker compose down -v --remove-orphans   # full reset
 
 | Service | Container | Endpoint | Notes |
 |---|---|---|---|
-| Airflow UI | `airflow_api_server` | http://localhost:8080 | admin / admin |
+| Airflow UI | `airflow_api_server` | http://localhost:8080 | admin / ... (to retrieve from airflow api server logs) |
 | ClickHouse | `airflow_clickhouse` | http://localhost:8123/play | TCP: 9000 |
 | Kafka | `airflow_kafka` | localhost:9092 | KRaft, no Zookeeper |
 | LocalStack (S3) | `airflow_localstack` | http://localhost:4566 | |

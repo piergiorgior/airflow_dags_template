@@ -51,7 +51,7 @@ from typing import Any
 
 from airflow.providers.amazon.aws.sensors.s3 import S3KeySensor
 from airflow.sdk import task
-from airflow.models import Variable
+from airflow.sdk import Variable
 
 from _base_dag import make_dag, build_idempotent_run_key
 from hooks.clickhouse_hook import ClickHouseHook

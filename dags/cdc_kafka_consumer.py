@@ -50,7 +50,7 @@ from datetime import datetime
 from typing import Any
 
 from airflow.sdk import task
-from airflow.models import Variable
+from airflow.sdk import Variable
 from airflow.providers.postgres.hooks.postgres import PostgresHook
 from airflow.sdk.bases.sensor import BaseSensorOperator
 from airflow.sdk import Context
@@ -160,7 +160,10 @@ with make_dag(
     kafka_sensor = KafkaBatchSensor(
         task_id="wait_for_kafka_messages",
         # Resolved at runtime so brokers can change without touching DAG code
-        kafka_bootstrap_servers="{{ var.value.kafka_bootstrap_servers }}",
+        kafka_bootstrap_servers=Variable.get(
+            "kafka_bootstrap_servers",
+            default_var="kafka:29092",
+        ),
         kafka_topic=KAFKA_TOPIC,
         kafka_group_id=KAFKA_GROUP_ID,
         poll_timeout_ms=POLL_TIMEOUT_MS,
@@ -185,7 +188,7 @@ with make_dag(
         Returns:
             List of deserialised record dicts (one per valid Kafka message).
         """
-        bootstrap = Variable.get("kafka_bootstrap_servers")
+        bootstrap = Variable.get("kafka_bootstrap_servers", default_var="kafka:29092")
 
         from kafka import KafkaConsumer  # noqa: PLC0415
 
@@ -273,7 +276,8 @@ with make_dag(
         hook = PostgresHook(postgres_conn_id="postgres_target")
         # hook.run() with a list executes executemany; for batches > 10k rows
         # replace with psycopg2.extras.execute_values for ~10× throughput.
-        hook.run(sql, parameters=records, autocommit=True)
+        for record in records:
+            hook.run(sql, parameters=record, autocommit=True)
         log.info("Upsert complete | records=%d | run_key=%s", len(records), run_key)
 
         # Commit Kafka offsets AFTER successful write (at-least-once guarantee)
