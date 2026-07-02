@@ -1,6 +1,6 @@
 # airflow-dag-templates
 
-Production-grade Apache Airflow 3.x DAG templates demonstrating Senior Data Platform Engineering patterns: idempotent pipelines, custom hooks, CDC streaming, S3 ingestion, and a full pytest suite.
+Production-grade Apache Airflow 3.x DAG templates: it includes idempotent pipelines, custom hooks, CDC streaming, S3 ingestion, and a full pytest suite.
 
 The entire stack runs locally via Docker Compose — no external accounts required.
 
